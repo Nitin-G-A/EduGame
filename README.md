@@ -2,27 +2,27 @@
 
 An AI-powered educational platform that bridges the communication gap between students and teachers, making learning interactive, personalized, and gamified. Built with React, TypeScript, Vite, Tailwind CSS, and Supabase.
 
-## 🎯 Primary Goals
+## Primary Goals
 1. Bridge the communication gap between students and teachers.
 2. Make learning interactive, personalized, and gamified.
 3. Provide accurate academic answers, summaries, quizzes, and feedback using AI.
 
-## 👥 User Roles
+## User Roles
 
-### 🎓 Student Capabilities
+### Student Capabilities
 - **Doubt Solver:** Answer academic doubts with accurate step-by-step explanations.
 - **AI Summarizer:** Summarize notes, lectures, and PDFs into key points, flashcards, and quick quiz questions.
 - **Quiz Arena:** Generate quizzes based on any topic and provide explanations.
 - **Study Planner:** Help with assignments by explaining concepts.
 - **Explain My Mistake (Unique Feature):** Upload a wrong answer and the AI will explain the mistake, how to correct it, provide a correct solution, and give 1-3 similar practice questions.
 
-### 👨‍🏫 Teacher Capabilities
+### Teacher Capabilities
 - **Quiz Generator:** Create quizzes with difficulty levels, marks, and explanations.
 - **Assignments:** Help create assignments and use AI to evaluate them and assign marks with feedback.
 - **Analytics:** Analyze class and student performance based on provided data.
 - **AI Lesson Planner (Unique Feature):** Generate detailed lesson plans including learning objectives, teaching activities, common mistakes, quick quiz questions, and suggested class flow.
 
-## 🚀 Tech Stack
+## Tech Stack
 - **Frontend:** React + TypeScript, Vite, Tailwind CSS, shadcn/ui
 - **Backend & Database:** Supabase (PostgreSQL, Edge Functions for AI, Storage)
 - **Package Manager:** npm / bun
@@ -56,7 +56,7 @@ npm run dev
 bun run dev
 \\\
 
-## 📜 Available Scripts
+## Available Scripts
 - \
 pm run dev\ - Start the Vite development server
 - \
@@ -66,7 +66,7 @@ pm run preview\ - Preview the production build locally
 - \
 pm run lint\ - Run ESLint
 
-## 🚀 Deployment
+## Deployment
 This app can be smoothly deployed to Vercel, Netlify, or any static hosting service.
 - **Build command:** \
 pm run build\
@@ -74,6 +74,6 @@ pm run build\
 
 Make sure to add your Supabase environment variables in your hosting provider's dashboard.
 
-## 📞 Contact
+## Contact
 **Nitin G A**  
 GitHub: [https://github.com/Nitin-G-A](https://github.com/Nitin-G-A)
