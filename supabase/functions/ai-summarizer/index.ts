@@ -1,0 +1,201 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+// Input validation helper
+function validateInput(body: unknown): { content: string; title: string; images?: string[] } | null {
+  if (!body || typeof body !== 'object') return null;
+  
+  const data = body as Record<string, unknown>;
+  
+  // Validate content (optional if images provided)
+  const content = typeof data.content === 'string' ? data.content.substring(0, 100000) : '';
+  
+  // Validate title
+  const title = typeof data.title === 'string' && data.title.length <= 500 ? data.title : '';
+  
+  // Validate images (optional, array of base64 strings)
+  let images: string[] | undefined;
+  if (data.images !== undefined) {
+    if (!Array.isArray(data.images)) return null;
+    if (data.images.length > 10) return null; // Limit to 10 images
+    
+    images = [];
+    for (const img of data.images) {
+      if (typeof img !== 'string') return null;
+      // Basic validation for base64 data URL
+      if (!img.startsWith('data:image/')) return null;
+      if (img.length > 5000000) return null; // Limit each image to ~5MB
+      images.push(img);
+    }
+  }
+  
+  // Must have either content or images
+  if (!content.trim() && (!images || images.length === 0)) {
+    return null;
+  }
+  
+  return { content, title, images };
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const body = await req.json();
+    
+    // Validate input
+    const validatedInput = validateInput(body);
+    if (!validatedInput) {
+      return new Response(JSON.stringify({ error: "Invalid input parameters" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    const { content, title, images } = validatedInput;
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not configured");
+
+    const hasContent = content && content.trim();
+    const hasImages = images && images.length > 0;
+
+    console.log("Processing summarization request:", {
+      contentLength: content?.length || 0,
+      imageCount: images?.length || 0
+    });
+
+    // Build messages based on whether we have text, images, or both
+    const userContent: unknown[] = [];
+    
+    if (hasImages) {
+      // Add instruction for image processing
+      userContent.push({
+        type: "text",
+        text: `Please analyze and extract all text content from the following ${images.length} page image(s) of a document${title ? ` titled "${title}"` : ''}. Then create a comprehensive summary, key points, flashcards, and quiz questions based on the content.${hasContent ? `\n\nAdditional text content extracted: ${content.substring(0, 30000)}` : ''}`
+      });
+      
+      // Add images
+      for (const imageData of images) {
+        userContent.push({
+          type: "image_url",
+          image_url: {
+            url: imageData
+          }
+        });
+      }
+    } else {
+      // Text-only content
+      userContent.push({
+        type: "text",
+        text: `Summarize this content${title ? ` titled "${title}"` : ''}: ${content.substring(0, 50000)}`
+      });
+    }
+
+    const messages = [
+      { 
+        role: "system", 
+        content: `You are an educational assistant that creates summaries, flashcards, and quiz questions from lecture content. When processing images of documents, first extract all readable text, then create comprehensive educational materials. Be thorough in extracting text from images - read every line carefully.`
+      },
+      {
+        role: "user",
+        content: userContent
+      }
+    ];
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages,
+        tools: [{
+          type: "function",
+          function: {
+            name: "create_summary",
+            description: "Create educational summary materials from the provided content",
+            parameters: {
+              type: "object",
+              properties: {
+                summary: { type: "string", description: "A comprehensive summary of the content (2-3 paragraphs)" },
+                keyPoints: { type: "array", items: { type: "string" }, description: "5-7 key points from the content" },
+                flashcards: { 
+                  type: "array", 
+                  items: { 
+                    type: "object", 
+                    properties: { 
+                      front: { type: "string", description: "The question or term" }, 
+                      back: { type: "string", description: "The answer or definition" } 
+                    },
+                    required: ["front", "back"]
+                  },
+                  description: "5-8 flashcards for studying"
+                },
+                quizQuestions: { 
+                  type: "array", 
+                  items: { 
+                    type: "object", 
+                    properties: { 
+                      question: { type: "string" }, 
+                      answer: { type: "string" } 
+                    },
+                    required: ["question", "answer"]
+                  },
+                  description: "5-8 quiz questions with answers"
+                },
+              },
+              required: ["summary", "keyPoints", "flashcards", "quizQuestions"],
+            },
+          },
+        }],
+        tool_choice: { type: "function", function: { name: "create_summary" } },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("AI API Error:", response.status, errorText);
+      
+      if (response.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: "API credits exhausted. Please contact support." }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
+      throw new Error("AI request failed");
+    }
+
+    const data = await response.json();
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    
+    if (!toolCall) {
+      console.error("No tool call in response:", JSON.stringify(data));
+      throw new Error("Failed to generate summary");
+    }
+    
+    const result = JSON.parse(toolCall.function.arguments);
+
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    console.error("Error:", error);
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
